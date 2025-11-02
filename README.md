@@ -1,6 +1,5 @@
 cd ~/stock_prophet
 
-# rancoder用に修正
 cat > README.md << 'EOF'
 # 📈 Stock Prophet - AI株価予測システム
 
