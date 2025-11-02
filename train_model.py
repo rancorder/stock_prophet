@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 """
 株価予測モデル訓練スクリプト
+XGBoostを使用した機械学習モデルの訓練
 """
 import sys
 sys.path.append('.')
@@ -9,49 +9,56 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 import joblib
 import logging
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class StockPredictor:
+    """株価予測モデル訓練クラス"""
+    
     def __init__(self):
+        """初期化"""
         self.db_path = './data/stock_data.db'
         self.model_path = './models/stock_model.pkl'
     
-    def create_features(self, df):
-        """テクニカル指標作成"""
-        # 移動平均
+    def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        テクニカル指標を作成
+        
+        Args:
+            df: 株価データのDataFrame
+        
+        Returns:
+            特徴量追加後のDataFrame
+        """
         df['SMA_5'] = df['Close'].rolling(5).mean()
         df['SMA_20'] = df['Close'].rolling(20).mean()
         
-        # RSI
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        # 価格変動率
         df['Return_1d'] = df['Close'].pct_change(1)
         df['Return_5d'] = df['Close'].pct_change(5)
-        
-        # ボラティリティ
         df['Volatility'] = df['Return_1d'].rolling(20).std()
-        
-        # 出来高
         df['Volume_SMA'] = df['Volume'].rolling(20).mean()
-        
-        # ターゲット: 翌日の終値
         df['Target'] = df['Close'].shift(-1)
         
         return df.dropna()
     
-    def load_all_data(self):
-        """全銘柄データ読み込み"""
+    def load_all_data(self) -> Optional[pd.DataFrame]:
+        """
+        全銘柄のデータを読み込み
+        
+        Returns:
+            結合された全データのDataFrame、失敗時はNone
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -82,19 +89,22 @@ class StockPredictor:
             logger.error("❌ データが見つかりません")
             return None
         
-        # 全データ結合
         combined = pd.concat(all_data)
-        logger.info(f"\n�� 合計データ数: {len(combined)}件")
+        logger.info(f"\n📊 合計データ数: {len(combined)}件")
         
         return combined
     
-    def train(self):
-        """モデル訓練"""
+    def train(self) -> Optional[XGBRegressor]:
+        """
+        モデルを訓練
+        
+        Returns:
+            訓練済みモデル、失敗時はNone
+        """
         logger.info("=" * 60)
         logger.info("🤖 モデル訓練開始")
         logger.info("=" * 60)
         
-        # データ読み込み
         logger.info("\n📥 データ読み込み中...")
         df = self.load_all_data()
         
@@ -102,7 +112,6 @@ class StockPredictor:
             logger.error("❌ データがありません")
             return None
         
-        # 特徴量とターゲット
         feature_cols = [
             'Open', 'High', 'Low', 'Close', 'Volume',
             'SMA_5', 'SMA_20', 'RSI',
@@ -115,7 +124,6 @@ class StockPredictor:
         logger.info(f"📊 特徴量数: {X.shape[1]}")
         logger.info(f"📊 サンプル数: {len(X)}")
         
-        # 訓練・テストデータ分割
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
@@ -124,7 +132,6 @@ class StockPredictor:
         logger.info(f"  訓練: {len(X_train)}件")
         logger.info(f"  テスト: {len(X_test)}件")
         
-        # XGBoostモデル訓練
         logger.info(f"\n🤖 XGBoostモデル訓練中...")
         model = XGBRegressor(
             n_estimators=100,
@@ -136,7 +143,6 @@ class StockPredictor:
         
         model.fit(X_train, y_train)
         
-        # 評価
         train_score = model.score(X_train, y_train)
         test_score = model.score(X_test, y_test)
         
@@ -144,12 +150,10 @@ class StockPredictor:
         logger.info(f"  訓練スコア (R²): {train_score:.4f}")
         logger.info(f"  テストスコア (R²): {test_score:.4f}")
         
-        # 予測精度確認
         y_pred = model.predict(X_test)
         mae = np.mean(np.abs(y_test - y_pred))
         logger.info(f"  平均誤差 (MAE): ${mae:.2f}")
         
-        # モデル保存
         joblib.dump(model, self.model_path)
         logger.info(f"\n💾 モデル保存完了: {self.model_path}")
         
