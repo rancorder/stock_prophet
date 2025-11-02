@@ -1,6 +1,4 @@
-cd ~/stock_prophet
 
-cat > README.md << 'EOF'
 # 📈 Stock Prophet - AI株価予測システム
 
 <div align="center">
