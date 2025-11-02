@@ -262,6 +262,3 @@ MIT License
 [GitHub](https://github.com/rancoder/stock-prophet)
 
 </div>
-EOF
-
-cat README.md
